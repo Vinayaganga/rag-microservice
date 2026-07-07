@@ -4,8 +4,14 @@
 
 const VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings";
 const MODEL = "voyage-3.5";
+const MAX_RETRIES = 5;
+const DEFAULT_RETRY_DELAY_MS = 21_000; // free-tier accounts are capped at 3 requests/minute
 
-async function embed(texts, inputType) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function embed(texts, inputType, attempt = 0) {
   const response = await fetch(VOYAGE_API_URL, {
     method: "POST",
     headers: {
@@ -18,6 +24,14 @@ async function embed(texts, inputType) {
       input_type: inputType,
     }),
   });
+
+  if (response.status === 429 && attempt < MAX_RETRIES) {
+    const retryAfterHeader = Number(response.headers.get("retry-after"));
+    const delayMs = retryAfterHeader > 0 ? retryAfterHeader * 1000 : DEFAULT_RETRY_DELAY_MS;
+    console.warn(`Voyage rate limit hit, retrying in ${delayMs / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
+    await sleep(delayMs);
+    return embed(texts, inputType, attempt + 1);
+  }
 
   if (!response.ok) {
     const body = await response.text();
