@@ -13,6 +13,14 @@ import { retrieve } from "./retrieval/retriever.js";
 import { generateAnswer } from "./generation/generator.js";
 import { storeSize, clearStore } from "./shared/vectorStore.js";
 
+const REQUIRED_ENV_VARS = ["ANTHROPIC_API_KEY", "VOYAGE_API_KEY"];
+const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]);
+if (missing.length > 0) {
+  console.error(`Missing required environment variable(s): ${missing.join(", ")}`);
+  console.error("Copy .env.example to .env and fill them in before starting the server.");
+  process.exit(1);
+}
+
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 
