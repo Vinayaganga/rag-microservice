@@ -19,8 +19,8 @@ QUESTION:
 ${query}`;
 }
 
-export async function generateAnswer(query, { topK } = {}) {
-  const chunks = await retrieve(query, topK);
+export async function generateAnswer(query, { topK, chunks: prefetchedChunks } = {}) {
+  const chunks = prefetchedChunks ?? (await retrieve(query, topK));
 
   if (chunks.length === 0) {
     return {
