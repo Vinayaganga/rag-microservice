@@ -1,5 +1,9 @@
 # RAG Microservice
 
+See [PORTFOLIO.md](PORTFOLIO.md) for how this connects to its sibling
+projects, the architecture decisions worth explaining out loud, and what
+broke along the way (and how it was found).
+
 A modular RAG engine built as composable Node.js services: ingestion,
 embedding, retrieval, and generation. Runs as a single Express app locally
 (zero infra needed — vector storage is a JSON file), but each route maps
@@ -119,13 +123,19 @@ just take longer rather than fail outright.
 - **Vector store**: `shared/vectorStore.js` is brute-force cosine similarity
   over a JSON file — fine up to a few thousand chunks. Swap for pgvector
   (stays close to your Postgres/AWS stack) once you outgrow it.
-- **Retrieval quality**: hybrid search + reranking is done (`/retrieve/hybrid`
-  in `hybridRetriever.js`) — but only verified as wired-correctly, not shown
-  to meaningfully outperform pure-vector search, since the sample corpus is
-  only 2 docs. Point `npm run eval` at both retrieval paths once you have a
-  bigger/messier corpus to see if hybrid actually improves Hit@k/MRR.
-  Swapping `/ask` to use `hybridRetrieve` instead of `retrieve` is a small
-  change in `generation/generator.js` once that's confirmed.
+- **Retrieval quality**: `npm run eval` now runs both `retrieve()` (vector)
+  and `hybridRetrieve()` side by side and reports Hit@k/MRR for each. Tried
+  this against 7 docs (up from 2) with deliberately overlapping vocabulary
+  (several docs share "retry"/"rate limit" language with different specific
+  numbers) — both paths still scored 100%/1.00 with zero disagreements. That's
+  a real finding, not a bug: with only ~9 total chunks and `topK=5`, over half
+  the corpus is returned on every query regardless of method, so there isn't
+  enough scale yet for the two approaches to diverge. The comparison becomes
+  meaningful with a genuinely large/messy corpus (hundreds of chunks) where
+  `topK` is a small fraction of the total — that's the next real test, not
+  more sample docs like these. Swapping `/ask` to use `hybridRetrieve` instead
+  of `retrieve` is a small change in `generation/generator.js` once that's
+  confirmed to help.
 - **Observability**: `/ask` already returns latency; extend with per-stage
   timing (embed vs retrieve vs generate) — useful talking points for
   system design interviews.
