@@ -10,6 +10,7 @@ import "dotenv/config";
 import express from "express";
 import { ingestDocuments } from "./ingestion/pipeline.js";
 import { retrieve } from "./retrieval/retriever.js";
+import { hybridRetrieve } from "./retrieval/hybridRetriever.js";
 import { generateAnswer } from "./generation/generator.js";
 import { storeSize, clearStore } from "./shared/vectorStore.js";
 
@@ -45,6 +46,20 @@ app.get("/retrieve", async (req, res) => {
     const { query, topK } = req.query;
     if (!query) return res.status(400).json({ error: "Missing 'query' param." });
     const results = await retrieve(query, topK ? Number(topK) : undefined);
+    res.json({ results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Hybrid search: BM25 + vector fused via Reciprocal Rank Fusion, then
+// re-ranked with Voyage's rerank API. Directly comparable to /retrieve above.
+app.get("/retrieve/hybrid", async (req, res) => {
+  try {
+    const { query, topK } = req.query;
+    if (!query) return res.status(400).json({ error: "Missing 'query' param." });
+    const results = await hybridRetrieve(query, topK ? Number(topK) : undefined);
     res.json({ results });
   } catch (err) {
     console.error(err);

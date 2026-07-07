@@ -1,9 +1,11 @@
-// Voyage AI embeddings, called via plain fetch (no SDK dependency).
+// Voyage AI embeddings + reranking, called via plain fetch (no SDK dependency).
 // Voyage embeddings are asymmetric: ingested chunks are embedded with
 // input_type "document", search queries with input_type "query".
 
-const VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings";
-const MODEL = "voyage-3.5";
+const VOYAGE_EMBEDDINGS_URL = "https://api.voyageai.com/v1/embeddings";
+const VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank";
+const EMBEDDING_MODEL = "voyage-3.5";
+const RERANK_MODEL = "rerank-2.5";
 const MAX_RETRIES = 5;
 const DEFAULT_RETRY_DELAY_MS = 21_000; // free-tier accounts are capped at 3 requests/minute
 
@@ -11,18 +13,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function embed(texts, inputType, attempt = 0) {
-  const response = await fetch(VOYAGE_API_URL, {
+async function postJSON(url, body, attempt = 0) {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
     },
-    body: JSON.stringify({
-      model: MODEL,
-      input: texts,
-      input_type: inputType,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (response.status === 429 && attempt < MAX_RETRIES) {
@@ -30,24 +28,39 @@ async function embed(texts, inputType, attempt = 0) {
     const delayMs = retryAfterHeader > 0 ? retryAfterHeader * 1000 : DEFAULT_RETRY_DELAY_MS;
     console.warn(`Voyage rate limit hit, retrying in ${delayMs / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
     await sleep(delayMs);
-    return embed(texts, inputType, attempt + 1);
+    return postJSON(url, body, attempt + 1);
   }
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Voyage embeddings request failed (${response.status}): ${body}`);
+    const text = await response.text();
+    throw new Error(`Voyage request to ${url} failed (${response.status}): ${text}`);
   }
 
-  const { data } = await response.json();
-  return data.map((d) => d.embedding);
+  return response.json();
 }
 
 export async function embedTexts(texts, inputType = "document") {
   // texts: string[] -> returns number[][]
-  return embed(texts, inputType);
+  const { data } = await postJSON(VOYAGE_EMBEDDINGS_URL, {
+    model: EMBEDDING_MODEL,
+    input: texts,
+    input_type: inputType,
+  });
+  return data.map((d) => d.embedding);
 }
 
 export async function embedOne(text, inputType = "query") {
-  const [embedding] = await embed([text], inputType);
+  const [embedding] = await embedTexts([text], inputType);
   return embedding;
+}
+
+export async function rerank(query, documents, topK) {
+  // documents: string[] -> returns [{ index, relevanceScore }] sorted by relevance desc
+  const { data } = await postJSON(VOYAGE_RERANK_URL, {
+    model: RERANK_MODEL,
+    query,
+    documents,
+    top_k: topK,
+  });
+  return data.map((d) => ({ index: d.index, relevanceScore: d.relevance_score }));
 }

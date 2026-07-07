@@ -47,6 +47,13 @@ Retrieval only (no generation, useful for debugging chunk quality):
 curl "http://localhost:3000/retrieve?query=what+is+the+retry+policy&topK=3"
 ```
 
+Hybrid search (BM25 keyword search + vector search, fused via Reciprocal
+Rank Fusion, then re-ranked with Voyage's rerank API) — directly comparable
+to the vector-only `/retrieve` above:
+```bash
+curl "http://localhost:3000/retrieve/hybrid?query=what+is+the+retry+policy&topK=3"
+```
+
 Full RAG (retrieve + generate grounded answer):
 ```bash
 curl -X POST http://localhost:3000/ask \
@@ -82,8 +89,9 @@ grading prompt and `src/eval/runEval.js` for how metrics are computed.
 ```
 src/
   ingestion/    chunking + the pipeline that ties chunk -> embed -> store
-  embedding/    Voyage AI embeddings client (plain fetch, no SDK)
-  retrieval/    query embedding + vector search
+  embedding/    Voyage AI embeddings + reranking client (plain fetch, no SDK)
+  retrieval/    query embedding + vector search (retriever.js), plus BM25
+                (bm25.js) and hybrid RRF-fusion + rerank (hybridRetriever.js)
   generation/   prompt construction + Claude call
   shared/       vector store (swap this for pgvector/Pinecone later)
   eval/         retrieval metrics (hit@k/MRR) + LLM-as-judge answer scoring
@@ -111,9 +119,13 @@ just take longer rather than fail outright.
 - **Vector store**: `shared/vectorStore.js` is brute-force cosine similarity
   over a JSON file — fine up to a few thousand chunks. Swap for pgvector
   (stays close to your Postgres/AWS stack) once you outgrow it.
-- **Retrieval quality**: add hybrid search (BM25 + vector) and a re-ranking
-  step once you have enough data to notice retrieval misses — compare
-  before/after using `npm run eval`.
+- **Retrieval quality**: hybrid search + reranking is done (`/retrieve/hybrid`
+  in `hybridRetriever.js`) — but only verified as wired-correctly, not shown
+  to meaningfully outperform pure-vector search, since the sample corpus is
+  only 2 docs. Point `npm run eval` at both retrieval paths once you have a
+  bigger/messier corpus to see if hybrid actually improves Hit@k/MRR.
+  Swapping `/ask` to use `hybridRetrieve` instead of `retrieve` is a small
+  change in `generation/generator.js` once that's confirmed.
 - **Observability**: `/ask` already returns latency; extend with per-stage
   timing (embed vs retrieve vs generate) — useful talking points for
   system design interviews.
