@@ -1,0 +1,17 @@
+{
+  "name": "rag-microservice",
+  "version": "0.1.0",
+  "description": "Modular RAG engine built as composable Node.js services (ingestion, embedding, retrieval, generation)",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "ingest": "node src/ingestion/cli.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5"
+  }
+}
